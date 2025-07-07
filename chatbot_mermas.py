@@ -7,7 +7,7 @@ import google.generativeai as genai
 # --- CONFIGURACIÓN ---
 DB_FILE = 'datamart_mermas.db'
 # --- PEGA AQUÍ TU CLAVE DE API DE GOOGLE GEMINI ---
-GOOGLE_API_KEY = "AIzaSyDwRgy2TCCJr7j4WxeNJw_zyZNnWV6o7yA" # <-- ¡REEMPLAZA ESTO CON TU CLAVE REAL!
+GOOGLE_API_KEY = "AIzaSyDwRgy2TCCJr7j4WxeNJw_zyZNnWV6o7yA" # <-- ¡REEMPLAZE ESTO CON SU CLAVE!
 
 # Configura la API de Google
 try:

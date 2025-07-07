@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?><sqlb_project><db path="" readonly="0" foreign_keys="" case_sensitive_like="" temp_store="" wal_autocheckpoint="" synchronous=""/><attached/><window><main_tabs open="structure browser pragmas query" current="3"/></window><tab_structure><column_width id="0" width="300"/><column_width id="1" width="0"/><column_width id="2" width="100"/><column_width id="3" width="1457"/><column_width id="4" width="0"/></tab_structure><tab_browse><table title="." custom_title="0" dock_id="3" table="0,0:"/><dock_state state="000000ff00000000fd0000000100000002000002480000020cfc0100000003fb000000160064006f0063006b00420072006f00770073006500310100000000000002480000000000000000fb000000160064006f0063006b00420072006f00770073006500320100000000ffffffff0000000000000000fb000000160064006f0063006b00420072006f00770073006500330100000000ffffffff0000011e00ffffff000002480000000000000004000000040000000800000008fc00000000"/><default_encoding codec=""/><browse_table_settings/></tab_browse><tab_sql><sql name="SQL 1*">-- ========= TABLAS DE DIMENSIONES =========
+
+-- 1. Dimensión Tiempo
+CREATE TABLE dim_tiempo (
+    id_tiempo   INTEGER PRIMARY KEY,
+    fecha       DATE NOT NULL,
+    dia         INTEGER NOT NULL,
+    nombre_dia  TEXT NOT NULL,
+    semana      INTEGER NOT NULL,
+    mes         INTEGER NOT NULL,
+    nombre_me   TEXT NOT NULL,
+    trimestre   INTEGER NOT NULL,
+    año         INTEGER NOT NULL,
+    semestre    INTEGER NOT NULL,
+    es_feriado  BOOLEAN NOT NULL
+);
+
+-- 2. Dimensión Producto
+CREATE TABLE dim_producto (
+    id_producto     INTEGER PRIMARY KEY,
+    descripcion     TEXT,
+    categoria       TEXT,
+    subcategoria    TEXT,
+    linea           TEXT,
+    seccion         TEXT,
+    marca           TEXT,
+    abastecimiento  TEXT,
+    fecha_alta      DATE,
+    fecha_baja      DATE,
+    unidad_medida   TEXT
+);
+
+-- 3. Dimensión Ubicación
+CREATE TABLE dim_ubicacion (
+    id_ubicacion    INTEGER PRIMARY KEY,
+    tienda          TEXT,
+    comuna          TEXT,
+    provincia       TEXT,
+    region          TEXT,
+    pais            TEXT,
+    zonal           TEXT,
+    tipo_tienda     TEXT,
+    superficie      INTEGER,
+    anio_apertu     INTEGER
+);
+
+-- 4. Dimensión Motivo
+CREATE TABLE dim_motivo (
+    id_motivo           INTEGER PRIMARY KEY,
+    motivo              TEXT,
+    ubicacion_motivo    TEXT,
+    tipo_responsable    TEXT,
+    gravedad            TEXT
+);
+
+
+-- ========= TABLA DE HECHOS =========
+
+CREATE TABLE hechos_mermas (
+    id_hecho        INTEGER PRIMARY KEY,
+    merma_unidad    DECIMAL(10, 2),
+    merma_monto     DECIMAL(12, 2),
+    -- Claves Foráneas que conectan con las dimensiones
+    id_producto     INTEGER,
+    id_ubicacion    INTEGER,
+    id_tiempo       INTEGER,
+    id_motivo       INTEGER,
+    
+    FOREIGN KEY (id_producto) REFERENCES dim_producto(id_producto),
+    FOREIGN KEY (id_ubicacion) REFERENCES dim_ubicacion(id_ubicacion),
+    FOREIGN KEY (id_tiempo) REFERENCES dim_tiempo(id_tiempo),
+    FOREIGN KEY (id_motivo) REFERENCES dim_motivo(id_motivo)
+);</sql><sql name="SQL 2*">SELECT DISTINCT seccion
+FROM dim_producto;</sql><sql name="SQL 3*">SELECT
+    p.categoria,
+    SUM(h.merma_monto) AS total_merma_monto
+FROM hechos_mermas h
+JOIN dim_producto p ON h.id_producto = p.id_producto
+GROUP BY p.categoria
+ORDER BY total_merma_monto DESC;</sql><sql name="SQL 4*">SELECT
+    u.tienda,
+    COUNT(*) AS cantidad_de_mermas
+FROM hechos_mermas h
+JOIN dim_ubicacion u ON h.id_ubicacion = u.id_ubicacion
+JOIN dim_motivo m ON h.id_motivo = m.id_motivo
+WHERE m.motivo = 'Vencimiento'
+GROUP BY u.tienda
+ORDER BY cantidad_de_mermas DESC;</sql><current_tab id="3"/></tab_sql></sqlb_project>

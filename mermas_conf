@@ -1,0 +1,102 @@
+import pandas as pd
+import sqlite3
+from unidecode import unidecode
+import re
+# --- CONFIGURACIÓN ---
+CSV_FILE = 'mermas_actividad_unidad_2.xlsx'  # O .xlsx si es un excel
+DB_FILE = 'datamart_mermas.db'
+
+# Conectar a la base de datos (la creará si no existe)
+conn = sqlite3.connect(DB_FILE)
+
+# --- 1. EXTRACT ---
+print("Cargando datos desde el CSV...")
+df = pd.read_excel(CSV_FILE) # Usar pd.read_excel(CSV_FILE) si es un excel
+df['fecha'] = pd.to_datetime(df['fecha'])
+# --- LÍNEA DE DEPURACIÓN (AÑADIR ESTO) ---
+print("Nombres de las columnas encontrados en el archivo:")
+print(df.columns)
+# --- FIN DE LA LÍNEA DE DEPURACIÓN ---
+# --- 2. TRANSFORM & LOAD - DIMENSIONES ---
+
+print("Normalizando nombres de columnas...")
+
+def normalize_column_names(df):
+    new_columns = []
+    for col in df.columns:
+        # 1. Quitar tildes y caracteres especiales
+        new_col = unidecode(col)
+        # 2. Convertir a minúsculas
+        new_col = new_col.lower()
+        # 3. Reemplazar espacios y caracteres no alfanuméricos por guiones bajos
+        new_col = re.sub(r'[^0-9a-zA-Z_]+', '_', new_col)
+        new_columns.append(new_col)
+    df.columns = new_columns
+    return df
+
+df = normalize_column_names(df)
+
+print("Nombres de columnas normalizados:")
+print(df.columns)
+
+# -- Dimensión Producto --
+print("Procesando dimensión Producto...")
+# Seleccionamos las columnas únicas de producto
+dim_producto_df = df[['descripcion', 'categoria', 'seccion', 'linea']].drop_duplicates().reset_index(drop=True)
+# Creamos la PK
+dim_producto_df['id_producto'] = dim_producto_df.index + 1
+# Cargamos a la BD
+dim_producto_df.to_sql('dim_producto', conn, if_exists='replace', index=False)
+
+
+# -- Dimensión Ubicación --
+print("Procesando dimensión Ubicación...")
+dim_ubicacion_df = df[['tienda', 'comuna', 'region']].drop_duplicates().reset_index(drop=True)
+dim_ubicacion_df['id_ubicacion'] = dim_ubicacion_df.index + 1
+dim_ubicacion_df.to_sql('dim_ubicacion', conn, if_exists='replace', index=False)
+
+
+# -- Dimensión Motivo --
+print("Procesando dimensión Motivo...")
+dim_motivo_df = df[['motivo', 'ubicacion_motivo']].drop_duplicates().reset_index(drop=True)
+dim_motivo_df['id_motivo'] = dim_motivo_df.index + 1
+dim_motivo_df.to_sql('dim_motivo', conn, if_exists='replace', index=False)
+
+
+# -- Dimensión Tiempo --
+print("Procesando dimensión Tiempo...")
+dim_tiempo_df = pd.DataFrame({'fecha': df['fecha'].unique()})
+dim_tiempo_df['fecha'] = pd.to_datetime(dim_tiempo_df['fecha'])
+dim_tiempo_df = dim_tiempo_df.sort_values('fecha').reset_index(drop=True)
+dim_tiempo_df['id_tiempo'] = dim_tiempo_df.index + 1
+dim_tiempo_df['dia'] = dim_tiempo_df['fecha'].dt.day
+dim_tiempo_df['nombre_dia'] = dim_tiempo_df['fecha'].dt.day_name()
+dim_tiempo_df['semana'] = dim_tiempo_df['fecha'].dt.isocalendar().week
+dim_tiempo_df['mes'] = dim_tiempo_df['fecha'].dt.month
+dim_tiempo_df['nombre_me'] = dim_tiempo_df['fecha'].dt.month_name()
+dim_tiempo_df['trimestre'] = dim_tiempo_df['fecha'].dt.quarter
+dim_tiempo_df['año'] = dim_tiempo_df['fecha'].dt.year
+dim_tiempo_df['semestre'] = (dim_tiempo_df['trimestre'] > 2).astype(int) + 1
+dim_tiempo_df['es_feriado'] = False  # Asumimos no feriado, se puede enriquecer después
+dim_tiempo_df.to_sql('dim_tiempo', conn, if_exists='replace', index=False)
+
+# --- 3. PREPARAR Y CARGAR TABLA DE HECHOS ---
+print("Preparando tabla de Hechos...")
+
+# Hacemos "merge" para traer los IDs de las dimensiones al dataframe principal
+hechos_df = df.copy()
+hechos_df = pd.merge(hechos_df, dim_producto_df, on=['descripcion', 'categoria', 'seccion', 'linea'], how='left')
+hechos_df = pd.merge(hechos_df, dim_ubicacion_df, on=['tienda', 'comuna', 'region'], how='left')
+hechos_df = pd.merge(hechos_df, dim_motivo_df, on=['motivo', 'ubicacion_motivo'], how='left')
+hechos_df = pd.merge(hechos_df, dim_tiempo_df[['fecha', 'id_tiempo']], on='fecha', how='left')
+
+# Seleccionamos solo las columnas que necesitamos para la tabla de hechos
+hechos_final_df = hechos_df[['merma_unidad', 'merma_monto', 'id_producto', 'id_ubicacion', 'id_tiempo', 'id_motivo']]
+
+# Cargamos la tabla de hechos a la BD
+hechos_final_df.to_sql('hechos_mermas', conn, if_exists='replace', index=False)
+
+print("¡Proceso ETL completado! El datamart ha sido creado y poblado en el archivo 'datamart_mermas.db'.")
+
+# Cerrar la conexión
+conn.close()
